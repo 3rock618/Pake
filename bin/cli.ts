@@ -25,13 +25,14 @@ program
   // Refer to https://github.com/tj/commander.js#custom-option-processing, turn string array into a string connected with custom connectors.
   // If the platform is Linux, use `-` as the connector, and convert all characters to lowercase.
   // For example, Google Translate will become google-translate.
-  .option('--name <string...>', 'Application name', (value, previous) => {
+  .option('--name <string...>', 'Application name (for bundle identifier)', (value, previous) => {
     const platform = process.platform
     const connector = platform === 'linux' ? '-' : ' '
     const name = previous === undefined ? value : `${previous}${connector}${value}`
     
     return platform === 'linux' ? name.toLowerCase() : name
   })
+  .option('--title <string>', 'Application display title (supports spaces and special characters)', DEFAULT.title)
   .option('--icon <string>', 'Application icon', DEFAULT.icon)
   .option('--width <number>', 'Window width', validateNumberInput, DEFAULT.width)
   .option('--height <number>', 'Window height', validateNumberInput, DEFAULT.height)

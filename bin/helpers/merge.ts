@@ -24,6 +24,7 @@ export async function mergeConfig(url: string, options: PakeAppOptions, tauriCon
     useLocalFile,
     identifier,
     name,
+    title,
     resizable = true,
     inject,
     proxyUrl,
@@ -46,7 +47,7 @@ export async function mergeConfig(url: string, options: PakeAppOptions, tauriCon
   };
   Object.assign(tauriConf.pake.windows[0], { url, ...tauriConfWindowOptions });
 
-  tauriConf.productName = name;
+  tauriConf.productName = title || name;
   tauriConf.identifier = identifier;
   tauriConf.version = appVersion;
 
@@ -198,6 +199,33 @@ export async function mergeConfig(url: string, options: PakeAppOptions, tauriCon
     await fsExtra.writeFile(injectFilePath, '');
   }
   tauriConf.pake.proxy_url = proxyUrl || '';
+
+  // Platform-specific bundle configurations for proper title display
+  // Note: In Tauri v2, CFBundleDisplayName is automatically set from productName
+  // For custom Info.plist entries, we would need to create a custom Info.plist file
+
+  if (platform === 'win32' && title) {
+    // Set display name for Windows installer
+    if (!tauriConf.bundle.windows) {
+      tauriConf.bundle.windows = {};
+    }
+    if (!tauriConf.bundle.windows.nsis) {
+      tauriConf.bundle.windows.nsis = {};
+    }
+    tauriConf.bundle.windows.nsis.displayName = title;
+  }
+
+  if (platform === 'linux' && title) {
+    // Set desktop file name for Linux
+    if (!tauriConf.bundle.linux) {
+      tauriConf.bundle.linux = {};
+    }
+    if (!tauriConf.bundle.linux.deb) {
+      tauriConf.bundle.linux.deb = {};
+    }
+    tauriConf.bundle.linux.deb.section = "Utility";
+    // Note: Linux desktop file Name will be handled by productName in tauri.conf.json
+  }
 
   // Save config file.
   const platformConfigPaths: PlatformMap = {

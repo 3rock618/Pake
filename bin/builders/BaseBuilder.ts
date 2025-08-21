@@ -75,7 +75,8 @@ export default abstract class BaseBuilder {
   }
 
   async buildAndCopy(url: string, target: string) {
-    const { name } = this.options;
+    const { name, title } = this.options;
+    const displayName = title || name;
     await mergeConfig(url, this.options, tauriConfig);
 
     // Build app
@@ -87,7 +88,7 @@ export default abstract class BaseBuilder {
     const fileName = this.getFileName();
     const fileType = this.getFileType(target);
     const appPath = this.getBuildAppPath(npmDirectory, fileName, fileType);
-    const distPath = path.resolve(`${name}.${fileType}`);
+    const distPath = path.resolve(`${displayName}.${fileType}`);
     await fsExtra.copy(appPath, distPath);
     await fsExtra.remove(appPath);
     logger.success('✔ Build success!');

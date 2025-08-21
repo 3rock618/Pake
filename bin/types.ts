@@ -6,6 +6,9 @@ export interface PakeCliOptions {
   // Application name
   name?: string;
 
+  // Application display title
+  title?: string;
+
   // Application icon
   icon: string;
 
