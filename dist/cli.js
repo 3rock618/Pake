@@ -66,7 +66,7 @@ var type = "module";
 var exports = "./dist/pake.js";
 var license = "MIT";
 var dependencies = {
-	"@tauri-apps/api": "^1.6.0",
+	"@tauri-apps/api": "2.2.0",
 	"@tauri-apps/cli": "^2.1.0",
 	axios: "^1.7.9",
 	chalk: "^5.4.1",
@@ -673,7 +673,8 @@ class BaseBuilder {
         await mergeConfig(url, this.options, tauriConfig);
     }
     async buildAndCopy(url, target) {
-        const { name } = this.options;
+        const { name, title } = this.options;
+        const displayName = title || name;
         await mergeConfig(url, this.options, tauriConfig);
         // Build app
         const spinner = getSpinner('Building app...');
@@ -683,7 +684,7 @@ class BaseBuilder {
         const fileName = this.getFileName();
         const fileType = this.getFileType(target);
         const appPath = this.getBuildAppPath(npmDirectory, fileName, fileType);
-        const distPath = path.resolve(`${name}.${fileType}`);
+        const distPath = path.resolve(`${displayName}.${fileType}`);
         await fsExtra.copy(appPath, distPath);
         await fsExtra.remove(appPath);
         logger.success('✔ Build success!');
@@ -711,7 +712,8 @@ class MacBuilder extends BaseBuilder {
         this.options.targets = 'dmg';
     }
     getFileName() {
-        const { name } = this.options;
+        const { name, title } = this.options;
+        const displayName = title || name;
         let arch;
         if (this.options.multiArch) {
             arch = 'universal';
@@ -719,7 +721,7 @@ class MacBuilder extends BaseBuilder {
         else {
             arch = process.arch === 'arm64' ? 'aarch64' : process.arch;
         }
-        return `${name}_${tauriConfig.version}_${arch}`;
+        return `${displayName}_${tauriConfig.version}_${arch}`;
     }
     getBuildCommand() {
         return this.options.multiArch ? 'npm run build:mac' : super.getBuildCommand();

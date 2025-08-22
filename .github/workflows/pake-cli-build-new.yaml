@@ -1,0 +1,253 @@
+name: Build Desktop Apps with Pake CLI (From Source)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Website URL to wrap'
+        required: true
+        type: string
+      app_name:
+        description: 'Application bundle identifier (letters, numbers, dashes only - used for --name)'
+        required: true
+        type: string
+      app_title:
+        description: 'Display Title (can contain spaces and special characters - uses --title)'
+        required: true
+        type: string
+      target:
+        description: 'Build target (single selection)'
+        required: false
+        type: choice
+        default: 'macos-arm'
+        options:
+          - linux
+          - macos-intel
+          - macos-arm
+          - windows
+      config:
+        description: 'JSON configuration for all Pake CLI options'
+        required: false
+        type: string
+        default: '{}'
+
+# JSON Configuration Format (organized by platform):
+# Can be empty {}, only "global" section, or full config with platform sections.
+# Missing parameters use CLI defaults. All parameters are optional.
+#
+# {
+#   "global": {
+#     "icon": "https://example.com/icon.png",        // App icon URL (optional)
+#     "width": 1200,                                 // Window width (optional, default: 1200)
+#     "height": 780,                                 // Window height (optional, default: 780)
+#     "fullscreen": false,                           // Start in fullscreen (optional, default: false)
+#     "activation_shortcut": "CmdOrCtrl+Shift+P",    // Global shortcut (optional)
+#     "user_agent": "Custom UA String",              // Custom user agent (optional)
+#     "always_on_top": false,                        // Always on top (optional, default: false)
+#     "disabled_web_shortcuts": false,               // Disable web shortcuts (optional, default: false)
+#     "show_system_tray": false,                     // Show system tray (optional, default: false)
+#     "system_tray_icon": "https://example.com/tray.png" // System tray icon URL (optional)
+#   },
+#   "macos": {                                       // macOS-specific options (optional section)
+#     "hide_title_bar": false,                       // Hide title bar (optional, default: false)
+#     "multi_arch": false                            // Build universal binary (optional, default: false)
+#   },
+#   "windows": {                                     // Windows-specific options (optional section)
+#     "installer_language": "en-US"                  // Installer language (optional, default: system)
+#   },
+#   "linux": {                                       // Linux-specific options (optional section)
+#     "targets": "deb"                              // Package formats: deb, appimage, rpm (optional, default: deb)
+#   }
+# }
+
+concurrency:
+  group: pake-cli-build-new-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ inputs.app_title }} (${{ inputs.target }})
+    runs-on: ${{ inputs.target == 'windows' && 'windows-latest' || inputs.target == 'linux' && 'ubuntu-latest' || 'macos-latest' }}
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'Pake/package-lock.json'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ inputs.target == 'windows' && 'x86_64-pc-windows-msvc' || inputs.target == 'linux' && 'x86_64-unknown-linux-gnu' || inputs.target == 'macos-intel' && 'x86_64-apple-darwin' || 'aarch64-apple-darwin' }}
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            Pake/src-tauri/target/
+          key: ${{ runner.os }}-${{ inputs.target }}-cargo-${{ hashFiles('Pake/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ inputs.target }}-cargo-
+
+      - name: Install Linux system dependencies
+        if: inputs.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install dependencies and build CLI
+        working-directory: Pake
+        run: |
+          npm install
+          npm run cli:build
+
+      - name: Build desktop app
+        working-directory: Pake
+        env:
+          URL: ${{ inputs.url }}
+          APP_NAME: ${{ inputs.app_name }}
+          APP_TITLE: ${{ inputs.app_title }}
+          CONFIG: ${{ inputs.config }}
+          PLATFORM: ${{ inputs.target }}
+        shell: bash
+        run: |
+          cat > build_app.mjs << 'EOF'
+          import fs from 'fs';
+          import path from 'path';
+          import { execSync } from 'child_process';
+
+          async function main() {
+            const url = process.env.URL;
+            const appName = process.env.APP_NAME;
+            const appTitle = process.env.APP_TITLE;
+            const configStr = process.env.CONFIG || '{}';
+            const platform = process.env.PLATFORM;
+            
+            let config;
+            try {
+              config = JSON.parse(configStr);
+            } catch (error) {
+              console.error('Invalid JSON config:', error.message);
+              config = {};
+            }
+
+            // Extract platform-specific configs with graceful fallbacks
+            const global = config.global || {};
+            const platformConfig = config[platform] || config[platform.split('-')[0]] || {};
+
+            console.log(`Building ${appTitle} for ${platform}`);
+            console.log('Config:', JSON.stringify(config, null, 2));
+
+            // Build Pake CLI command using the built CLI with --title support
+            let params = [`node`, `cli.js`, `"${url}"`, `--name`, `"${appName}"`, `--title`, `"${appTitle}"`];
+
+            // Add basic parameters from global config
+            if (global.width) params.push('--width', global.width.toString());
+            if (global.height) params.push('--height', global.height.toString());
+
+            // Add boolean flags from global config
+            if (global.fullscreen) params.push('--fullscreen');
+            if (global.always_on_top) params.push('--always-on-top');
+            if (global.disabled_web_shortcuts) params.push('--disabled-web-shortcuts');
+            if (global.show_system_tray) params.push('--show-system-tray');
+
+            // Add string parameters from global config
+            if (global.activation_shortcut) params.push('--activation-shortcut', `"${global.activation_shortcut}"`);
+            if (global.user_agent) params.push('--user-agent', `"${global.user_agent}"`);
+
+            // Platform-specific parameters
+            if (platform === 'linux') {
+              if (platformConfig.targets) params.push('--targets', platformConfig.targets);
+            } else if (platform.startsWith('macos')) {
+              if (platformConfig.hide_title_bar) params.push('--hide-title-bar');
+              if (platformConfig.multi_arch || platform === 'macos-intel') {
+                params.push('--multi-arch');
+              }
+            } else if (platform === 'windows') {
+              if (platformConfig.installer_language) params.push('--installer-language', platformConfig.installer_language);
+            }
+
+            // Handle icon
+            if (global.icon) {
+              params.push('--icon', `"${global.icon}"`);
+            }
+
+            // Handle system tray icon
+            if (global.system_tray_icon) {
+              params.push('--system-tray-icon', `"${global.system_tray_icon}"`);
+            }
+
+            const command = params.join(' ');
+            console.log('Executing:', command);
+            
+            try {
+              const output = execSync(command, { 
+                encoding: 'utf8', 
+                stdio: 'inherit',
+                shell: true 
+              });
+              console.log(`Build completed successfully for ${platform}`);
+            } catch (error) {
+              console.error('Build failed:', error.message);
+              process.exit(1);
+            }
+          }
+
+          main().catch(error => {
+            console.error('Build script failed:', error);
+            process.exit(1);
+          });
+          EOF
+
+          node build_app.mjs
+
+      - name: Find and prepare artifacts
+        working-directory: Pake
+        shell: bash
+        run: |
+          mkdir -p ../artifacts/${{ inputs.target }}
+          
+          # Find built files based on platform
+          case "${{ inputs.target }}" in
+            linux)
+              find . -maxdepth 1 \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) -exec mv {} ../artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              ;;
+            macos-*)
+              find . -maxdepth 1 -name "*.dmg" -exec mv {} ../artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              ;;
+            windows)
+              find . -maxdepth 1 \( -name "*.msi" -o -name "*.exe" \) -exec mv {} ../artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              ;;
+          esac
+          
+          # List what we found
+          echo "Artifacts found:"
+          ls -la ../artifacts/${{ inputs.target }}/ || echo "No artifacts directory created"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app_name }}-${{ inputs.target }}
+          path: artifacts/${{ inputs.target }}/*
+          retention-days: 7
+        continue-on-error: true
+
+      - name: Display build summary
+        run: |
+          echo "Build Summary:"
+          echo "- App Name: ${{ inputs.app_name }}"
+          echo "- App Title: ${{ inputs.app_title }}"
+          echo "- URL: ${{ inputs.url }}"
+          echo "- Platform: ${{ inputs.target }}"
+          echo "- Artifacts uploaded to: ${{ inputs.app_name }}-${{ inputs.target }}"
