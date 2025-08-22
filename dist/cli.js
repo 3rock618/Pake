@@ -17,7 +17,6 @@ import axios from 'axios';
 import { dir } from 'tmp-promise';
 import { fileTypeFromBuffer } from 'file-type';
 import * as psl from 'psl';
-import isUrl from 'is-url';
 
 var name = "pake-cli";
 var version$1 = "3.1.1";
@@ -74,7 +73,6 @@ var dependencies = {
 	commander: "^11.1.0",
 	"file-type": "^18.7.0",
 	"fs-extra": "^11.2.0",
-	"is-url": "^1.2.4",
 	loglevel: "^1.9.2",
 	ora: "^7.0.1",
 	prompts: "^2.4.2",
@@ -90,7 +88,6 @@ var devDependencies = {
 	"@rollup/plugin-replace": "^5.0.7",
 	"@rollup/plugin-terser": "^0.4.4",
 	"@types/fs-extra": "^11.0.4",
-	"@types/is-url": "^1.2.32",
 	"@types/node": "^20.17.10",
 	"@types/page-icon": "^0.3.6",
 	"@types/prompts": "^2.4.9",
@@ -125,7 +122,7 @@ var packageJson = {
 
 var windows = [
 	{
-		url: "https://weread.qq.com",
+		url: "https://github.com",
 		url_type: "web",
 		hide_title_bar: true,
 		fullscreen: false,
@@ -425,7 +422,7 @@ async function combineFiles(files, output) {
 }
 
 async function mergeConfig(url, options, tauriConf) {
-    const { width, height, fullscreen, hideTitleBar, alwaysOnTop, appVersion, darkMode, disabledWebShortcuts, activationShortcut, userAgent, showSystemTray, systemTrayIcon, useLocalFile, identifier, name, resizable = true, inject, proxyUrl, installerLanguage, } = options;
+    const { width, height, fullscreen, hideTitleBar, alwaysOnTop, appVersion, darkMode, disabledWebShortcuts, activationShortcut, userAgent, showSystemTray, systemTrayIcon, useLocalFile, identifier, name, title, resizable = true, inject, proxyUrl, installerLanguage, } = options;
     const { platform } = process;
     // Set Windows parameters.
     const tauriConfWindowOptions = {
@@ -440,7 +437,7 @@ async function mergeConfig(url, options, tauriConf) {
         disabled_web_shortcuts: disabledWebShortcuts,
     };
     Object.assign(tauriConf.pake.windows[0], { url, ...tauriConfWindowOptions });
-    tauriConf.productName = name;
+    tauriConf.productName = title || name;
     tauriConf.identifier = identifier;
     tauriConf.version = appVersion;
     if (platform == 'win32') {
@@ -582,6 +579,30 @@ async function mergeConfig(url, options, tauriConf) {
         await fsExtra.writeFile(injectFilePath, '');
     }
     tauriConf.pake.proxy_url = proxyUrl || '';
+    // Platform-specific bundle configurations for proper title display
+    // Note: In Tauri v2, CFBundleDisplayName is automatically set from productName
+    // For custom Info.plist entries, we would need to create a custom Info.plist file
+    if (platform === 'win32' && title) {
+        // Set display name for Windows installer
+        if (!tauriConf.bundle.windows) {
+            tauriConf.bundle.windows = {};
+        }
+        if (!tauriConf.bundle.windows.nsis) {
+            tauriConf.bundle.windows.nsis = {};
+        }
+        tauriConf.bundle.windows.nsis.displayName = title;
+    }
+    if (platform === 'linux' && title) {
+        // Set desktop file name for Linux
+        if (!tauriConf.bundle.linux) {
+            tauriConf.bundle.linux = {};
+        }
+        if (!tauriConf.bundle.linux.deb) {
+            tauriConf.bundle.linux.deb = {};
+        }
+        tauriConf.bundle.linux.deb.section = "Utility";
+        // Note: Linux desktop file Name will be handled by productName in tauri.conf.json
+    }
     // Save config file.
     const platformConfigPaths = {
         win32: 'tauri.windows.conf.json',
@@ -775,6 +796,7 @@ class BuilderProvider {
 
 const DEFAULT_PAKE_OPTIONS = {
     icon: '',
+    title: '',
     height: 780,
     width: 1200,
     fullscreen: false,
@@ -885,11 +907,12 @@ function appendProtocol(inputUrl) {
 // Normalizes the URL by ensuring it has a protocol and is valid.
 function normalizeUrl(urlToNormalize) {
     const urlWithProtocol = appendProtocol(urlToNormalize);
-    if (isUrl(urlWithProtocol)) {
+    try {
+        new URL(urlWithProtocol);
         return urlWithProtocol;
     }
-    else {
-        throw new Error(`Your url "${urlWithProtocol}" is invalid`);
+    catch (err) {
+        throw new Error(`Your url "${urlWithProtocol}" is invalid: ${err.message}`);
     }
 }
 
@@ -971,12 +994,13 @@ program
     // Refer to https://github.com/tj/commander.js#custom-option-processing, turn string array into a string connected with custom connectors.
     // If the platform is Linux, use `-` as the connector, and convert all characters to lowercase.
     // For example, Google Translate will become google-translate.
-    .option('--name <string...>', 'Application name', (value, previous) => {
+    .option('--name <string...>', 'Application name (for bundle identifier)', (value, previous) => {
     const platform = process.platform;
     const connector = platform === 'linux' ? '-' : ' ';
     const name = previous === undefined ? value : `${previous}${connector}${value}`;
     return platform === 'linux' ? name.toLowerCase() : name;
 })
+    .option('--title <string>', 'Application display title (supports spaces and special characters)', DEFAULT_PAKE_OPTIONS.title)
     .option('--icon <string>', 'Application icon', DEFAULT_PAKE_OPTIONS.icon)
     .option('--width <number>', 'Window width', validateNumberInput, DEFAULT_PAKE_OPTIONS.width)
     .option('--height <number>', 'Window height', validateNumberInput, DEFAULT_PAKE_OPTIONS.height)
@@ -984,7 +1008,7 @@ program
     .option('--fullscreen', 'Start in full screen', DEFAULT_PAKE_OPTIONS.fullscreen)
     .option('--hide-title-bar', 'For Mac, hide title bar', DEFAULT_PAKE_OPTIONS.hideTitleBar)
     .option('--multi-arch', 'For Mac, both Intel and M1', DEFAULT_PAKE_OPTIONS.multiArch)
-    .option('--inject <url...>', 'Injection of .js or .css files', DEFAULT_PAKE_OPTIONS.inject)
+    .option('--inject <./style.css,./script.js,...>', 'Injection of .js or .css files', (val, previous) => (val ? val.split(',').map(item => item.trim()) : DEFAULT_PAKE_OPTIONS.inject), DEFAULT_PAKE_OPTIONS.inject)
     .option('--debug', 'Debug build and more output', DEFAULT_PAKE_OPTIONS.debug)
     .addOption(new Option('--proxy-url <url>', 'Proxy URL for all network requests').default(DEFAULT_PAKE_OPTIONS.proxyUrl).hideHelp())
     .addOption(new Option('--user-agent <string>', 'Custom user agent').default(DEFAULT_PAKE_OPTIONS.userAgent).hideHelp())
