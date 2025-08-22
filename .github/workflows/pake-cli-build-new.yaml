@@ -79,7 +79,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: 'Pake/package-lock.json'
+          cache-dependency-path: 'package-lock.json'
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -95,8 +95,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            Pake/src-tauri/target/
-          key: ${{ runner.os }}-${{ inputs.target }}-cargo-${{ hashFiles('Pake/src-tauri/Cargo.lock') }}
+            src-tauri/target/
+          key: ${{ runner.os }}-${{ inputs.target }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ inputs.target }}-cargo-
 
@@ -107,13 +107,11 @@ jobs:
           sudo apt-get install -y libdbus-1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install dependencies and build CLI
-        working-directory: Pake
         run: |
           npm install
           npm run cli:build
 
       - name: Build desktop app
-        working-directory: Pake
         env:
           URL: ${{ inputs.url }}
           APP_NAME: ${{ inputs.app_name }}
@@ -213,27 +211,26 @@ jobs:
           node build_app.mjs
 
       - name: Find and prepare artifacts
-        working-directory: Pake
         shell: bash
         run: |
-          mkdir -p ../artifacts/${{ inputs.target }}
+          mkdir -p artifacts/${{ inputs.target }}
           
           # Find built files based on platform
           case "${{ inputs.target }}" in
             linux)
-              find . -maxdepth 1 \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) -exec mv {} ../artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              find . -maxdepth 1 \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) -exec mv {} artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
               ;;
             macos-*)
-              find . -maxdepth 1 -name "*.dmg" -exec mv {} ../artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              find . -maxdepth 1 -name "*.dmg" -exec mv {} artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
               ;;
             windows)
-              find . -maxdepth 1 \( -name "*.msi" -o -name "*.exe" \) -exec mv {} ../artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              find . -maxdepth 1 \( -name "*.msi" -o -name "*.exe" \) -exec mv {} artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
               ;;
           esac
           
           # List what we found
           echo "Artifacts found:"
-          ls -la ../artifacts/${{ inputs.target }}/ || echo "No artifacts directory created"
+          ls -la artifacts/${{ inputs.target }}/ || echo "No artifacts directory created"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
