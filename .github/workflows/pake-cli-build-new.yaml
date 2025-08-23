@@ -15,8 +15,8 @@ on:
         description: 'Display Title (can contain spaces and special characters - uses --title)'
         required: true
         type: string
-      target:
-        description: 'Build target (single selection)'
+      platform:
+        description: 'Build platform (single selection)'
         required: false
         type: choice
         default: 'macos-arm'
@@ -66,8 +66,8 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ inputs.app_title }} (${{ inputs.target }})
-    runs-on: ${{ inputs.target == 'windows' && 'windows-latest' || inputs.target == 'linux' && 'ubuntu-latest' || 'macos-latest' }}
+    name: ${{ inputs.app_title }} (${{ inputs.platform }})
+    runs-on: ${{ inputs.platform == 'windows' && 'windows-latest' || inputs.platform == 'linux' && 'ubuntu-latest' || 'macos-latest' }}
     timeout-minutes: 40
 
     steps:
@@ -83,7 +83,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          targets: ${{ inputs.target == 'windows' && 'x86_64-pc-windows-msvc' || inputs.target == 'linux' && 'x86_64-unknown-linux-gnu' || inputs.target == 'macos-intel' && 'x86_64-apple-darwin' || 'aarch64-apple-darwin' }}
+          targets: ${{ inputs.platform == 'windows' && 'x86_64-pc-windows-msvc' || inputs.platform == 'linux' && 'x86_64-unknown-linux-gnu' || inputs.platform == 'macos-intel' && 'x86_64-apple-darwin' || 'aarch64-apple-darwin' }}
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -94,12 +94,12 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             src-tauri/target/
-          key: ${{ runner.os }}-${{ inputs.target }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ inputs.platform }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ inputs.target }}-cargo-
+            ${{ runner.os }}-${{ inputs.platform }}-cargo-
 
       - name: Install Linux system dependencies
-        if: inputs.target == 'linux'
+        if: inputs.platform == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
@@ -115,7 +115,7 @@ jobs:
           APP_NAME: ${{ inputs.app_name }}
           APP_TITLE: ${{ inputs.app_title }}
           CONFIG: ${{ inputs.config }}
-          PLATFORM: ${{ inputs.target }}
+          PLATFORM: ${{ inputs.platform }}
         shell: bash
         run: |
           cat > build_app.mjs << 'EOF'
@@ -211,30 +211,49 @@ jobs:
       - name: Find and prepare artifacts
         shell: bash
         run: |
-          mkdir -p artifacts/${{ inputs.target }}
+          mkdir -p artifacts/${{ inputs.platform }}
+          
+          # Debug: Show the build structure to understand where files are created
+          echo "=== Build directory structure ==="
+          find src-tauri/target/release/bundle/ -type f 2>/dev/null | head -20 || echo "No bundle directory found"
           
           # Find built files based on platform
-          case "${{ inputs.target }}" in
+          case "${{ inputs.platform }}" in
             linux)
-              find . -maxdepth 1 \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) -exec mv {} artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              echo "=== Looking for Linux packages ==="
+              # Look in the Tauri bundle directories for Linux packages
+              find src-tauri/target/release/bundle/ -name "*.deb" -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true
+              find src-tauri/target/release/bundle/ -name "*.AppImage" -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true  
+              find src-tauri/target/release/bundle/ -name "*.rpm" -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true
+              # Also check current directory as fallback
+              find . -maxdepth 1 \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true
               ;;
             macos-*)
-              find . -maxdepth 1 -name "*.dmg" -exec mv {} artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              echo "=== Looking for macOS packages ==="
+              # Look in the Tauri bundle directories for macOS packages
+              find src-tauri/target/release/bundle/ -name "*.dmg" -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true
+              # Also check current directory as fallback
+              find . -maxdepth 1 -name "*.dmg" -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true
               ;;
             windows)
-              find . -maxdepth 1 \( -name "*.msi" -o -name "*.exe" \) -exec mv {} artifacts/${{ inputs.target }}/ \; 2>/dev/null || true
+              echo "=== Looking for Windows packages ==="
+              # Look in the Tauri bundle directories for Windows packages
+              find src-tauri/target/release/bundle/ -name "*.msi" -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true
+              find src-tauri/target/release/bundle/ -name "*.exe" -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true
+              # Also check current directory as fallback
+              find . -maxdepth 1 \( -name "*.msi" -o -name "*.exe" \) -exec ls -la {} \; -exec mv {} artifacts/${{ inputs.platform }}/ \; 2>/dev/null || true
               ;;
           esac
           
           # List what we found
-          echo "Artifacts found:"
-          ls -la artifacts/${{ inputs.target }}/ || echo "No artifacts directory created"
+          echo "=== Artifacts found ==="
+          ls -la artifacts/${{ inputs.platform }}/ || echo "No artifacts directory created"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.app_name }}-${{ inputs.target }}
-          path: artifacts/${{ inputs.target }}/*
+          name: ${{ inputs.app_name }}-${{ inputs.platform }}
+          path: artifacts/${{ inputs.platform }}/*
           retention-days: 7
         continue-on-error: true
 
@@ -244,5 +263,5 @@ jobs:
           echo "- App Name: ${{ inputs.app_name }}"
           echo "- App Title: ${{ inputs.app_title }}"
           echo "- URL: ${{ inputs.url }}"
-          echo "- Platform: ${{ inputs.target }}"
-          echo "- Artifacts uploaded to: ${{ inputs.app_name }}-${{ inputs.target }}"
+          echo "- Platform: ${{ inputs.platform }}"
+          echo "- Artifacts uploaded to: ${{ inputs.app_name }}-${{ inputs.platform }}"
