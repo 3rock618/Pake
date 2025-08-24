@@ -8,7 +8,8 @@ export default class LinuxBuilder extends BaseBuilder {
   }
 
   getFileName() {
-    const { name, targets } = this.options;
+    const { name, title, targets } = this.options;
+    const displayName = title || name;
     const version = tauriConfig.version;
 
     let arch = process.arch === 'x64' ? 'amd64' : process.arch;
@@ -18,10 +19,10 @@ export default class LinuxBuilder extends BaseBuilder {
 
     // The RPM format uses different separators and version number formats
     if (targets === 'rpm') {
-      return `${name}-${version}-1.${arch}`;
+      return `${displayName.replace(/ /g, '-')}-${version}-1.${arch}`;
     }
 
-    return `${name}_${version}_${arch}`;
+    return `${displayName}_${version}_${arch}`;
   }
 
   // Customize it, considering that there are all targets.

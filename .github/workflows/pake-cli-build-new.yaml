@@ -106,6 +106,7 @@ jobs:
 
       - name: Install dependencies and build CLI
         run: |
+          rm -rf src-tauri/target
           npm install
           npm run cli:build
 
