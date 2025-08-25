@@ -9,13 +9,14 @@ export default class MacBuilder extends BaseBuilder {
   }
 
   getFileName(): string {
-    const { name, title } = this.options;
+    const { name, title, platform } = this.options;
     const displayName = title || name;
     let arch: string;
     if (this.options.multiArch) {
       arch = 'universal';
     } else {
-      arch = process.arch === 'arm64' ? 'aarch64' : process.arch;
+      // Use target platform, not runner architecture
+      arch = platform === 'macos-intel' ? 'x86_64' : 'aarch64';
     }
     return `${displayName}_${tauriConfig.version}_${arch}`;
   }
