@@ -9,9 +9,10 @@ export default class WinBuilder extends BaseBuilder {
   }
 
   getFileName(): string {
-    const { name } = this.options;
+    const { name, title } = this.options;
+    const displayName = title || name;
     const { arch } = process;
     const language = tauriConfig.bundle.windows.wix.language[0];
-    return `${name}_${tauriConfig.version}_${arch}_${language}`;
+    return `${displayName}_${tauriConfig.version}_${arch}_${language}`;
   }
 }

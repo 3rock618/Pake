@@ -106,7 +106,7 @@ jobs:
 
       - name: Install dependencies and build CLI
         run: |
-          # rm -rf src-tauri/target  # Uncomment this line when troubleshooting build cache issues!
+          rm -rf src-tauri/target  # Uncomment this line when troubleshooting build cache issues!
           npm install
           npm run cli:build
 
