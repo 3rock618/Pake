@@ -30,12 +30,34 @@ export default class MacBuilder extends BaseBuilder {
   }
 
   protected getBuildCommand(): string {
-    return this.options.multiArch ? 'npm run build:mac' : super.getBuildCommand();
+    if (this.options.multiArch) {
+      return 'npm run build:mac';
+    }
+    
+    // For cross-compilation, we need to specify the target
+    const targetPlatform = process.env.PAKE_TARGET_PLATFORM;
+    if (targetPlatform === 'macos-intel') {
+      return 'npm run tauri build -- --target x86_64-apple-darwin';
+    } else if (targetPlatform === 'macos-arm') {
+      return 'npm run tauri build -- --target aarch64-apple-darwin';
+    }
+    
+    return super.getBuildCommand();
   }
 
   protected getBasePath(): string {
-    return this.options.multiArch
-      ? 'src-tauri/target/universal-apple-darwin/release/bundle'
-      : super.getBasePath();
+    if (this.options.multiArch) {
+      return 'src-tauri/target/universal-apple-darwin/release/bundle';
+    }
+    
+    // For cross-compilation, use target-specific path
+    const targetPlatform = process.env.PAKE_TARGET_PLATFORM;
+    if (targetPlatform === 'macos-intel') {
+      return 'src-tauri/target/x86_64-apple-darwin/release/bundle';
+    } else if (targetPlatform === 'macos-arm') {
+      return 'src-tauri/target/aarch64-apple-darwin/release/bundle';
+    }
+    
+    return super.getBasePath();
   }
 }
