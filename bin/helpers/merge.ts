@@ -205,14 +205,15 @@ export async function mergeConfig(url: string, options: PakeAppOptions, tauriCon
   // For custom Info.plist entries, we would need to create a custom Info.plist file
 
   if (platform === 'win32' && title) {
-    // Set display name for Windows installer
+    // Initialize Windows bundle config if needed
     if (!tauriConf.bundle.windows) {
       tauriConf.bundle.windows = {};
     }
     if (!tauriConf.bundle.windows.nsis) {
       tauriConf.bundle.windows.nsis = {};
     }
-    tauriConf.bundle.windows.nsis.displayName = title;
+    // Note: displayName is not a valid NSIS config property in Tauri
+    // The productName field (set above) controls the app title
   }
 
   if (platform === 'linux' && title) {
