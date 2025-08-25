@@ -168,7 +168,7 @@ jobs:
               if (platformConfig.targets) params.push('--targets', platformConfig.targets);
             } else if (platform.startsWith('macos')) {
               if (platformConfig.hide_title_bar) params.push('--hide-title-bar');
-              if (platformConfig.multi_arch || platform === 'macos-intel') {
+              if (platformConfig.multi_arch) {
                 params.push('--multi-arch');
               }
             } else if (platform === 'windows') {
