@@ -16,14 +16,15 @@ export default class MacBuilder extends BaseBuilder {
       arch = 'universal';
     } else {
       // Determine target architecture from platform info set by GitHub workflow
+      // Match what Tauri actually generates in filenames
       const targetPlatform = process.env.PAKE_TARGET_PLATFORM;
       if (targetPlatform === 'macos-intel') {
-        arch = 'x86_64';
+        arch = 'x64';  // Tauri uses 'x64', not 'x86_64' in filenames
       } else if (targetPlatform === 'macos-arm') {
         arch = 'aarch64';
       } else {
         // Fallback to process architecture  
-        arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+        arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
       }
     }
     return `${displayName}_${tauriConfig.version}_${arch}`;
