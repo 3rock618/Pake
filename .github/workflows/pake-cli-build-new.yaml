@@ -145,6 +145,9 @@ jobs:
 
             console.log(`Building ${appTitle} for ${platform}`);
             console.log('Config:', JSON.stringify(config, null, 2));
+            
+            // Set environment variable for platform target info
+            process.env.PAKE_TARGET_PLATFORM = platform;
 
             // Build Pake CLI command using the built CLI with --title support
             let params = [`node`, `cli.js`, `"${url}"`, `--name`, `"${appName}"`, `--title`, `"${appTitle}"`];

@@ -9,14 +9,22 @@ export default class MacBuilder extends BaseBuilder {
   }
 
   getFileName(): string {
-    const { name, title, platform } = this.options;
+    const { name, title } = this.options;
     const displayName = title || name;
     let arch: string;
     if (this.options.multiArch) {
       arch = 'universal';
     } else {
-      // Use target platform, not runner architecture
-      arch = platform === 'macos-intel' ? 'x86_64' : 'aarch64';
+      // Determine target architecture from platform info set by GitHub workflow
+      const targetPlatform = process.env.PAKE_TARGET_PLATFORM;
+      if (targetPlatform === 'macos-intel') {
+        arch = 'x86_64';
+      } else if (targetPlatform === 'macos-arm') {
+        arch = 'aarch64';
+      } else {
+        // Fallback to process architecture  
+        arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+      }
     }
     return `${displayName}_${tauriConfig.version}_${arch}`;
   }
